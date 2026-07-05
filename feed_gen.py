@@ -31,33 +31,58 @@ MAX_INSTANCES = 10
 OUTPUT_FILE = "docs/feed.xml"
 CACHE_FILE = "docs/cache.json"
 
+import time
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+from datetime import datetime, timedelta
+import json
+
+MAX_OFFSET = 9900 # Maximum pagination boundary allowed by the SEC EDGAR API index
+
 def fetch_hits():
     end = datetime.utcnow().date()
     start = end - timedelta(days=LOOKBACK_DAYS)
-    params = {
-        "q": QUERY, 
-        "forms": ",".join(FORMS), 
-        "dateRange": "custom", 
-        "startdt": start.isoformat(), 
-        "enddt": end.isoformat(), 
-        "size": 500 
-    }
-    url = "https://efts.sec.gov/LATEST/search-index?" + urlencode(params)
     
-    # Log the URL so you can copy-paste it into a browser to test
-    print(f"DEBUG: Querying SEC API: {url}")
+    all_hits = []
+    current_offset = 0
+    page_size = 100
     
-    req = Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-            hits = data.get("hits", {}).get("hits", [])
-            # Log the number of hits returned
-            print(f"DEBUG: API returned {len(hits)} hits.")
-            return hits
-    except Exception as e:
-        print(f"Request failed: {e}")
-        return []
+    while True:
+        params = {
+            "q": QUERY,
+            "forms": ",".join(FORMS),
+            "dateRange": "custom",
+            "startdt": start.isoformat(),
+            "enddt": end.isoformat(),
+            "size": page_size,
+            "from": current_offset
+        }
+        
+        url = "https://efts.sec.gov/LATEST/search-index?" + urlencode(params)
+        req = Request(url, headers={"User-Agent": USER_AGENT})
+        
+        try:
+            with urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                hits = data.get("hits", {}).get("hits", [])
+                total = data.get("hits", {}).get("total", {}).get("value", 0)
+                
+                all_hits.extend(hits)
+                
+                # Break if the page returns fewer results than requested, or if the max offset is reached
+                if len(hits) < page_size or current_offset + page_size > MAX_OFFSET:
+                    if total > len(all_hits):
+                        print(f"WARNING: {total} total matches exist but only {len(all_hits)} retrieved (hit pagination cap)")
+                    break
+                
+                current_offset += page_size
+                time.sleep(0.15) # Enforces the maximum 10 requests per second rule
+                
+        except Exception as e:
+            print(f"Request failed at offset {current_offset}: {e}")
+            break
+            
+    return all_hits
         
 def fetch_all_snippets(url, phrases, words=CONTEXT_WORDS, max_instances=MAX_INSTANCES):
     try:
