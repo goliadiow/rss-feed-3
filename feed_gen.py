@@ -7,23 +7,10 @@ from xml.sax.saxutils import escape
 USER_AGENT = "ErichRiesenberg itserich@gmail.com"
 # Define your phrases here
 # Define your phrases here as a list
-PHRASES = [
-    "tender offer",
-    "plan of arrangement",
-    "intent acquire",
-    "definitive merger agreement",
-    "consider strategic alternatives",
-    "liquidating distribution",
-    "plan return capital",
-    "restructure return capital",
-    "reduction force",
-    "review business",
-    "exploring strategic alternatives",
-    "strategic review",
-    "wind down",
-    "voluntary petition 11"
-]
+PHRASES = ["tender offer"]
 
+# This builds the exact string required by the SEC API:
+# '"tender offer" OR "liquidating distribution" OR "plan of arrangement"'
 QUERY = " OR ".join(f'"{p}"' for p in PHRASES)
 FORMS = ["8-K","6-K","DEF 14A","PRE 14A","DFAN14A","DEFM14A","PREM14A","PREC14A","DEFC14A","PREC14C","DEFC14C","SC TO-C","SC TO-T","SC TO-I"]
 LOOKBACK_DAYS = 4
@@ -32,42 +19,34 @@ MAX_INSTANCES = 10
 OUTPUT_FILE = "docs/feed.xml"
 CACHE_FILE = "docs/cache.json"
 
-import logging
-import time
-import urllib.request
-import urllib.parse
-from urllib.error import HTTPError, URLError
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def fetch_hits():
-    # Construct the URL for the SEC EDGAR search
-    # Use urllib.parse.quote to safely encode the QUERY string
-    encoded_query = urllib.parse.quote(QUERY)
-    url = f"https://data.sec.gov/submissions/something_here?q={encoded_query}"
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=LOOKBACK_DAYS)
+    params = {
+        "q": QUERY, 
+        "forms": ",".join(FORMS), 
+        "dateRange": "custom", 
+        "startdt": start.isoformat(), 
+        "enddt": end.isoformat(), 
+        "size": 100 
+    }
+    url = "https://efts.sec.gov/LATEST/search-index?" + urlencode(params)
     
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # Initialize the request object
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read().decode())
-        except HTTPError as e:
-            if e.code == 429:
-                sleep_time = (attempt + 1) * 10
-                logging.warning(f"Rate limited. Retrying in {sleep_time}s...")
-                time.sleep(sleep_time)
-            else:
-                logging.error(f"HTTP Error: {e.code} - {e.reason}")
-                break
-        except URLError as e:
-            logging.error(f"Network error: {e.reason}")
-            time.sleep(5)
-    return []
+    # Log the URL so you can copy-paste it into a browser to test
+    print(f"DEBUG: Querying SEC API: {url}")
     
+    req = Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            hits = data.get("hits", {}).get("hits", [])
+            # Log the number of hits returned
+            print(f"DEBUG: API returned {len(hits)} hits.")
+            return hits
+    except Exception as e:
+        print(f"Request failed: {e}")
+        return []
+        
 def fetch_all_snippets(url, phrases, words=CONTEXT_WORDS, max_instances=MAX_INSTANCES):
     try:
         req = Request(url, headers={"User-Agent": USER_AGENT})
