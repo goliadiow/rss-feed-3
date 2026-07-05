@@ -11,7 +11,7 @@ PHRASES = [
     "tender offer",
     "plan of arrangement",
     "intent acquire",
-    "definitive merger agreement",
+    "merger agreement",
     "consider strategic alternatives",
     "liquidating distribution",
     "plan return capital",
