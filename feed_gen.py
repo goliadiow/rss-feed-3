@@ -25,7 +25,7 @@ PHRASES = [
 ]
 QUERY = " OR ".join(f'"{p}"' for p in PHRASES)
 FORMS = ["8-K","6-K","DEF 14A","PRE 14A","DFAN14A","DEFM14A","PREM14A","PREC14A","DEFC14A","PREC14C","DEFC14C","SC TO-C","SC TO-T","SC TO-I"]
-LOOKBACK_DAYS = 4
+LOOKBACK_DAYS = 10
 CONTEXT_WORDS = 50
 MAX_INSTANCES = 10
 OUTPUT_FILE = "docs/feed.xml"
@@ -40,7 +40,7 @@ def fetch_hits():
         "dateRange": "custom", 
         "startdt": start.isoformat(), 
         "enddt": end.isoformat(), 
-        "size": 100 
+        "size": 500 
     }
     url = "https://efts.sec.gov/LATEST/search-index?" + urlencode(params)
     
